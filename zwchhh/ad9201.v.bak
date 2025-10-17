@@ -1,0 +1,216 @@
+module ad9201 (
+    input  clk_10mhz,
+    input  clk,     
+    input  rst_n,  
+    input  [9:0] adc_data,   
+    output wire adc_clk,    
+    output reg adc_select, 
+    output reg [9:0] i_data, 
+    output reg [9:0] q_data
+
+);
+
+parameter clk_FREQ = 50;  								
+parameter ADC_CLK_FREQ = 20;  								
+parameter CLK_DIV = clk_FREQ / (2 * ADC_CLK_FREQ);
+
+// 滤波参数设置 - 针对1-20KHz信号优化
+parameter FILTER_WINDOW = 32;  // 滤波窗口大小，32点移动平均
+parameter LOG2_WINDOW = 5;     // 2^5=32，用于移位除法
+
+// 内部寄存器定义
+reg [7:0] clk_counter;        
+reg adc_clk_reg;              
+reg [9:0] data_latch;         
+reg capture_i;                
+reg capture_q;                
+reg [2:0] pipeline_counter;   
+										
+reg [9:0] i_data_adc;         
+reg [9:0] q_data_adc;         
+
+// 跨时钟域同步寄存器
+reg [9:0] i_data_sync1, i_data_sync2;
+reg [9:0] q_data_sync1, q_data_sync2;
+reg data_valid_sync1, data_valid_sync2;
+
+// 滤波用移位寄存器和累加器
+reg [9:0] i_filter_reg [0:FILTER_WINDOW-1];
+reg [9:0] q_filter_reg [0:FILTER_WINDOW-1];
+reg [9+LOG2_WINDOW:0] i_sum;  // 累加器，位宽=10+4=14
+reg [9+LOG2_WINDOW:0] q_sum;  // 累加器，位宽=10+4=14
+
+// 状态机定义
+localparam STATE_IDLE     = 2'b00;
+localparam STATE_CAPTURE  = 2'b01;
+localparam STATE_PROCESS  = 2'b10;
+
+reg [1:0] current_state;
+reg [1:0] next_state;
+
+// 输出AD时钟
+assign adc_clk = clk_10mhz;
+
+// 冗余时钟生成逻辑（保留但注释）
+always @(posedge clk ) begin
+    if (!rst_n) begin
+        clk_counter <= 0;
+        adc_clk_reg <= 0;
+    end else begin
+        if (clk_counter >= CLK_DIV - 1) begin
+            clk_counter <= 0;
+            adc_clk_reg <= ~adc_clk_reg;
+        end else begin
+            clk_counter <= clk_counter + 1;
+        end
+    end
+end
+
+// 状态机时序逻辑
+always @(posedge clk_10mhz , negedge rst_n) begin
+    if (!rst_n) begin
+        current_state <= STATE_IDLE;
+    end else begin
+        current_state <= next_state;
+    end
+end
+
+// 状态机组合逻辑
+always @(*) begin
+    case (current_state)
+        STATE_IDLE: 
+            next_state = STATE_CAPTURE;
+        
+        STATE_CAPTURE:
+            next_state = STATE_PROCESS;
+        
+        STATE_PROCESS:
+            next_state = STATE_CAPTURE;
+        
+        default:
+            next_state = STATE_IDLE;
+    endcase
+end
+
+// 数据捕获逻辑
+always @(posedge clk_10mhz , negedge rst_n) begin
+    if (!rst_n) begin
+        adc_select <= 1'b0;
+        data_latch <= 10'b0;
+        i_data_adc <= 10'b0;
+        q_data_adc <= 10'b0;
+        capture_i <= 1'b0;
+        capture_q <= 1'b0;
+        pipeline_counter <= 3'b0;
+    end else begin
+        case (current_state)
+            STATE_IDLE: begin
+                adc_select <= 1'b0;
+                pipeline_counter <= 3'b0;
+            end
+            
+            STATE_CAPTURE: begin
+                data_latch <= adc_data;
+                        
+                if (adc_select) begin
+                    i_data_adc <= data_latch;  // 移除冗余的与操作
+                    capture_i <= 1'b1;
+                end else begin
+                    q_data_adc <= data_latch;  // 移除冗余的与操作
+                    capture_q <= 1'b1;
+                end
+                          
+                adc_select <= ~adc_select;
+                if (pipeline_counter < 3'b111)
+                    pipeline_counter <= pipeline_counter + 1;
+            end
+            
+            STATE_PROCESS: begin
+                if (pipeline_counter >= 3) begin
+                    if (capture_i && capture_q) begin
+                        capture_i <= 1'b0;
+                        capture_q <= 1'b0;
+                    end 
+                end
+            end
+        endcase
+    end
+end
+
+// 跨时钟域处理
+reg [9:0] adc_data_a_sync1, adc_data_a_sync2;
+always @(posedge clk or negedge rst_n) begin
+    if (!rst_n) begin
+        adc_data_a_sync1 <= 10'd0;
+        adc_data_a_sync2 <= 10'd0;
+    end else begin
+        adc_data_a_sync1 <= i_data_adc;
+        adc_data_a_sync2 <= adc_data_a_sync1;
+    end
+end
+
+reg [9:0] adc_data_b_sync1, adc_data_b_sync2;
+always @(posedge clk or negedge rst_n) begin
+    if (!rst_n) begin
+        adc_data_b_sync1 <= 10'd0;
+        adc_data_b_sync2 <= 10'd0;
+    end else begin
+        adc_data_b_sync1 <= q_data_adc;
+        adc_data_b_sync2 <= adc_data_b_sync1;
+    end
+end
+
+// I通道移动平均滤波
+integer i;
+always @(posedge clk or negedge rst_n) begin
+    if (!rst_n) begin
+        // 初始化滤波器寄存器和累加器
+        for (i = 0; i < FILTER_WINDOW; i = i + 1) begin
+            i_filter_reg[i] <= 10'd0;
+        end
+        i_sum <= 0;
+    end else begin
+        // 滑动窗口：减去最旧值，加上新值
+        i_sum <= i_sum - i_filter_reg[FILTER_WINDOW-1] + adc_data_a_sync2;
+        
+        // 移位操作
+        for (i = FILTER_WINDOW-1; i > 0; i = i - 1) begin
+            i_filter_reg[i] <= i_filter_reg[i-1];
+        end
+        i_filter_reg[0] <= adc_data_a_sync2;  // 存入新数据
+    end
+end
+
+// Q通道移动平均滤波
+always @(posedge clk or negedge rst_n) begin
+    if (!rst_n) begin
+        // 初始化滤波器寄存器和累加器
+        for (i = 0; i < FILTER_WINDOW; i = i + 1) begin
+            q_filter_reg[i] <= 10'd0;
+        end
+        q_sum <= 0;
+    end else begin
+        // 滑动窗口：减去最旧值，加上新值
+        q_sum <= q_sum - q_filter_reg[FILTER_WINDOW-1] + adc_data_b_sync2;
+        
+        // 移位操作
+        for (i = FILTER_WINDOW-1; i > 0; i = i - 1) begin
+            q_filter_reg[i] <= q_filter_reg[i-1];
+        end
+        q_filter_reg[0] <= adc_data_b_sync2;  // 存入新数据
+    end
+end
+
+// 输出滤波后的数据
+always @(posedge clk or negedge rst_n) begin
+    if (!rst_n) begin
+        i_data <= 10'd0;
+        q_data <= 10'd0;
+    end else begin
+        // 通过右移实现除法，得到平均值
+        i_data <= i_sum[9+LOG2_WINDOW : LOG2_WINDOW];
+        q_data <= q_sum[9+LOG2_WINDOW : LOG2_WINDOW];
+    end
+end
+
+endmodule

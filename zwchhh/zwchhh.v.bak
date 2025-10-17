@@ -1,0 +1,57 @@
+module zwchhh(
+		input					clk,
+		input					rst_n,
+		input					sig_A,
+		input					sig_B,
+		output		[7:0]	duan,
+		output		[2:0]	wei,
+		output				led
+);
+wire				clk_1khz;
+wire				clk_1hz;
+
+
+
+wire		[15:0]		fre;
+wire		[11:0]		phas;
+
+control_div m1(
+		.clk					(clk),
+		.rst_n				(rst_n),
+		.clk_10mhz			(clk_10mhz),
+		.clk_1khz			(clk_1khz),
+		.clk_1hz				(clk_1hz)
+);
+
+fre m2(
+		.clk					(clk),
+		.rst_n				(rst_n),
+		.sig_B				(sig_B),
+		.fre					(fre)
+);
+
+phas m3(
+		.clk					(clk),
+		.rst_n				(rst_n),
+		.sig_A				(sig_A),
+		.sig_B				(sig_B),
+		.phas					(phas)
+);
+
+display m4(
+		.clk_1khz			(clk_1khz),
+		.rst_n				(rst_n),
+		.fre					(fre),
+		.phas					(phas),
+		.duan					(duan),
+		.wei					(wei)
+);
+
+alarm m5(
+	.clk_1hz					(clk_1hz),
+	.rst_n					(rst_n),
+	.fre						(fre),	
+	.led						(led)
+);
+
+endmodule

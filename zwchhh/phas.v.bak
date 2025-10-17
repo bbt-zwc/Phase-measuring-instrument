@@ -1,0 +1,50 @@
+module phas
+   #(parameter    deg_180 = 8'd180)
+(
+		input						clk,
+		input						rst_n,
+		input	 					sig_A,
+		input	 					sig_B,
+		output	reg[11:0]	phas
+);
+				/*相位差计数*/
+reg			sig_xor;
+reg			old_xor;
+wire			pos_xor;
+reg[31:0] 	cnt_xoron;
+reg[31:0] 	cnt_xoroff;
+always @(posedge clk) begin
+	sig_xor <= sig_A ^ sig_B;
+	old_xor <= sig_xor;
+end
+assign	pos_xor = sig_xor & (~old_xor);//捕获上升沿脉冲
+reg		[31:0]cnt_xoron_reg;
+reg		[31:0]cnt_xoroff_reg;
+always @(posedge clk or negedge rst_n)begin
+	if(!rst_n)begin
+		cnt_xoron_reg  <= 0;
+		cnt_xoroff_reg	<= 0;
+		cnt_xoron		<= 0;
+		cnt_xoroff		<= 0;
+   end else if(pos_xor)begin
+		cnt_xoron 	<= cnt_xoron_reg;
+		cnt_xoroff  <= cnt_xoroff_reg;
+		cnt_xoron_reg  <= 0;
+		cnt_xoroff_reg	<= 0;
+	end else if(sig_xor)begin
+		cnt_xoron_reg  <= cnt_xoron_reg + 1;
+	end else begin
+		cnt_xoroff_reg <= cnt_xoroff_reg+1;
+	end
+end
+//计算相位差
+always@(posedge clk or negedge rst_n)
+begin
+	if(!rst_n) begin
+		phas <= 12'd0;
+	end else if(pos_xor) begin
+		phas <= (cnt_xoron *deg_180/(cnt_xoron+cnt_xoroff));
+	end
+end
+
+endmodule

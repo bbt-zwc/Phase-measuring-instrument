@@ -1,0 +1,13 @@
+v1
+DSP_BALANCING_IMPLEMENTATION,DSP_BLOCKS,fre:m2|lpm_mult:Mult0|mult_oft:auto_generated|mac_out2,
+DSP_BALANCING_IMPLEMENTATION,DSP_BLOCKS,fre:m2|lpm_mult:Mult0|mult_oft:auto_generated|mac_out4,
+DSP_BALANCING_IMPLEMENTATION,DSP_BLOCKS,fre:m2|lpm_mult:Mult0|mult_oft:auto_generated|mac_out8,
+DSP_BALANCING_IMPLEMENTATION,DSP_BLOCKS,phas:m3|lpm_mult:Mult0|mult_vdt:auto_generated|mac_out4,
+DSP_BALANCING_IMPLEMENTATION,DSP_BLOCKS,ad9201:m6|lpm_mult:Mult0|mult_1et:auto_generated|mac_out4,
+DSP_BALANCING_IMPLEMENTATION,DSP_BLOCKS,fre:m2|lpm_mult:Mult0|mult_oft:auto_generated|mac_out6,
+DSP_BALANCING_IMPLEMENTATION,DSP_BLOCKS,ad9201:m6|lpm_mult:Mult0|mult_1et:auto_generated|mac_out2,
+DSP_BALANCING_IMPLEMENTATION,DSP_BLOCKS,phas:m3|lpm_mult:Mult0|mult_vdt:auto_generated|mac_out2,
+PORT_SWAPPING,PORT_SWAP_TYPE_DSPMULT,fre:m2|lpm_mult:Mult0|mult_oft:auto_generated|mac_mult3,
+PORT_SWAPPING,PORT_SWAP_TYPE_DSPMULT,fre:m2|lpm_mult:Mult0|mult_oft:auto_generated|mac_mult5,
+PORT_SWAPPING,PORT_SWAP_TYPE_DSPMULT,fre:m2|lpm_mult:Mult0|mult_oft:auto_generated|mac_mult1,
+PORT_SWAPPING,PORT_SWAP_TYPE_DSPMULT,fre:m2|lpm_mult:Mult0|mult_oft:auto_generated|mac_mult7,

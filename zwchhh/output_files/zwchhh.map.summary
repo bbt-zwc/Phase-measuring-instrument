@@ -1,0 +1,14 @@
+Analysis & Synthesis Status : Successful - Thu Sep 11 12:51:24 2025
+Quartus II 64-Bit Version : 13.1.0 Build 162 10/23/2013 SJ Full Version
+Revision Name : zwchhh
+Top-level Entity Name : zwchhh
+Family : Cyclone III
+Total logic elements : 14,075
+    Total combinational functions : 11,568
+    Dedicated logic registers : 3,463
+Total registers : 3463
+Total pins : 26
+Total virtual pins : 0
+Total memory bits : 31,320
+Embedded Multiplier 9-bit elements : 15
+Total PLLs : 0

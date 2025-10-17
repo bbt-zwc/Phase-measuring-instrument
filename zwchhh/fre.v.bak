@@ -1,0 +1,154 @@
+module fre 
+   #(parameter    CLK_F = 26'd50_000_000)
+	(
+		input					clk,//50MHz
+		input					rst_n,
+		input	 				sig_B,
+		output reg[15:0]	fre
+);
+				/*测信号频率计数*/
+reg		[15:0]GATE_TIME;//仿真用2
+reg				pre_cnt_b;
+reg				sta_pre_cnt;
+reg				gate_B;
+reg				gate_clk;
+reg				new_gate_B;
+reg				old_gate_B;
+reg				new_gate_clk;
+reg				old_gate_clk;
+reg				gate_reg;
+reg  		[63:0]fre_temp;
+reg		[15:0]gate_cnt;
+reg		[31:0]cnt_gate_B;
+reg		[31:0]cnt_gate_clk;
+reg		[31:0]temp_cnt_gate_B;
+reg		[31:0]temp_cnt_gate_clk;
+wire				neg_gate_B;
+wire				neg_gate_clk;
+
+
+//对B信号估计频率调整测量时间
+always @(posedge clk or negedge rst_n) begin
+	if(!rst_n) begin
+		pre_cnt_b <= 0;
+		sta_pre_cnt <= 0;
+		GATE_TIME    <= 16'd5;
+	end else begin
+		sta_pre_cnt <= sta_pre_cnt+1'b1;
+		if(sig_B) begin
+			pre_cnt_b <= pre_cnt_b+1'b1;
+		end
+		if(sta_pre_cnt > 50000000) begin
+			sta_pre_cnt <= 50000000;
+			if(pre_cnt_b < 10) begin
+				GATE_TIME = 16'd1;
+			end else if(pre_cnt_b >= 10 && pre_cnt_b < 100) begin
+				GATE_TIME = 16'd5;
+			end else if(pre_cnt_b >= 100 && pre_cnt_b < 1000) begin
+				GATE_TIME = 16'd50;
+			end else if(pre_cnt_b >= 1000 && pre_cnt_b < 10000) begin
+				GATE_TIME = 16'd500;
+			end else if(pre_cnt_b >= 10000) begin
+				GATE_TIME = 16'd5000;
+			
+			end
+		end
+	end
+end
+
+//门控信号计数器
+always @(posedge sig_B or negedge rst_n) begin
+	if(!rst_n) begin
+		gate_cnt <= 16'd0;
+	end else if(gate_cnt == GATE_TIME+5'd20) begin
+		gate_cnt <= 16'd0;
+	end else begin
+		gate_cnt <= gate_cnt + 1'b1;
+	end
+end
+//与B信号同步的门控信号
+always @(posedge sig_B or negedge rst_n) begin
+	if(!rst_n) begin
+		gate_B <= 0;
+	end else if(gate_cnt < 4'd10) begin
+		gate_B <= 0;
+	end else if(gate_cnt < GATE_TIME+4'd10) begin
+		gate_B <= 1;
+	end else if(gate_cnt < GATE_TIME+5'd20) begin
+		gate_B <= 0;
+	end else begin
+		gate_B <= 0;
+	end
+end
+//与clk信号同步的门控信号
+always @(posedge clk or negedge rst_n) begin
+	if(!rst_n) begin
+		gate_reg <= 0;
+		gate_clk <= 0;
+	end else begin
+		gate_reg <= gate_B;
+		gate_clk <= gate_reg;
+	end
+end
+//捕获与B信号同步的门控信号下降沿
+always @(posedge sig_B or negedge rst_n) begin
+	if(!rst_n) begin
+		new_gate_B <= 0;
+		old_gate_B <= 0;
+	end else begin
+		new_gate_B <= gate_B;
+		old_gate_B <= new_gate_B;
+	end
+end
+assign	neg_gate_B = old_gate_B & (~new_gate_B);
+//捕获与clk信号同步的门控信号下降沿
+always @(posedge clk or negedge rst_n) begin
+	if(!rst_n) begin
+		new_gate_clk <= 0;
+		old_gate_clk <= 0;
+	end else begin
+		new_gate_clk <= gate_clk;
+		old_gate_clk <= new_gate_clk;
+	end
+end
+assign	neg_gate_clk = old_gate_clk & (~new_gate_clk);
+//门控时间内对B信号计数
+always @(posedge sig_B or negedge rst_n) begin
+	if(!rst_n) begin
+		temp_cnt_gate_B <= 32'd0;
+		cnt_gate_B		 <= 32'd0;
+	end else if(gate_B) begin
+		temp_cnt_gate_B <= temp_cnt_gate_B+1;
+	end else if(neg_gate_B) begin
+		temp_cnt_gate_B <= 32'd0;
+		cnt_gate_B		 <= temp_cnt_gate_B;
+	end
+end
+//门控时间内对clk信号计数
+always @(posedge clk or negedge rst_n) begin
+	if(!rst_n) begin
+		temp_cnt_gate_clk <= 32'd0;
+		cnt_gate_clk		<= 32'd0;
+	end else if(gate_clk) begin
+		temp_cnt_gate_clk <= temp_cnt_gate_clk+1;
+	end else if(neg_gate_clk) begin
+		temp_cnt_gate_clk <= 32'd0;
+		cnt_gate_clk		<= temp_cnt_gate_clk;
+	end
+end
+//计算B信号频率
+always@(posedge clk or negedge rst_n) begin
+	if(!rst_n) begin
+		fre_temp <= 64'd0;
+	end else if(gate_clk == 1'd0) begin
+		fre_temp <= CLK_F * cnt_gate_B;
+	end
+end
+always@(posedge clk or negedge rst_n) begin
+	if(!rst_n) begin
+		fre <= 16'd0;
+	end else if(gate_clk == 1'd0) begin
+		fre <= fre_temp / cnt_gate_clk;
+	end
+end
+endmodule
